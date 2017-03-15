@@ -213,6 +213,7 @@ abstract class RDD[T: ClassTag](
    */
   def unpersist(blocking: Boolean = true): this.type = {
     logInfo("Removing RDD " + id + " from persistence list")
+    sc.dagScheduler.renewDepMap(id)
     sc.unpersistRDD(id, blocking)
     storageLevel = StorageLevel.NONE
     this
@@ -311,6 +312,29 @@ abstract class RDD[T: ClassTag](
     // In case there is a cycle, do not include the root itself
     ancestors.filterNot(_ == this).toSeq
   }
+  
+  
+  private[spark] def getNarrowCachedAncestors: Set[Int] = {
+        val cachedAncestors = new mutable.HashSet[Int]
+        val ancestors = new mutable.HashSet[RDD[_]]
+        def visit(rdd: RDD[_]): Unit = {
+            val narrowDependencies = rdd.dependencies.filter(_.isInstanceOf[NarrowDependency[_]])
+            val narrowParents = narrowDependencies.map(_.rdd)
+            val narrowParentsNotVisited = narrowParents.filterNot(ancestors.contains)
+            narrowParentsNotVisited.foreach { parent =>
+                ancestors.add(parent)
+                if (parent.getStorageLevel != StorageLevel.NONE) {
+                    cachedAncestors.add(parent.id)
+                  } else {
+                    visit(parent)
+                 }
+              }
+          }
+
+          visit(this)
+
+          cachedAncestors.filterNot(_ == this.id).toSet
+      }
 
   /**
    * Compute an RDD partition or read it from a checkpoint if the RDD is checkpointing.
