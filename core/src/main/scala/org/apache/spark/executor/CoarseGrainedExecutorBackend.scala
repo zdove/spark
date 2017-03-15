@@ -94,6 +94,12 @@ private[spark] class CoarseGrainedExecutorBackend(
       } else {
         val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
+          
+         val currentStageId = taskDesc.name.substring(taskDesc.name.lastIndexOf(' ') + 1,
+          taskDesc.name.lastIndexOf('.')).toInt
+        env.currentStage = currentStageId
+        env.blockManager.currentStage = currentStageId
+          
         executor.launchTask(this, taskDesc)
       }
 
