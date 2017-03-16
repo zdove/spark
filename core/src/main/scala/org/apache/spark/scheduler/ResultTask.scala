@@ -25,7 +25,8 @@ import java.util.Properties
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-
+import scala.collection.mutable.HashMap
+ 
 /**
  * A task that sends back the output to the driver application.
  *
@@ -60,9 +61,11 @@ private[spark] class ResultTask[T, U](
     serializedTaskMetrics: Array[Byte],
     jobId: Option[Int] = None,
     appId: Option[String] = None,
-    appAttemptId: Option[String] = None)
+    appAttemptId: Option[String] = None, depMap: HashMap[Int, Set[Int]] = null,
+    curRunningRddMap: HashMap[Int, Set[Int]] = null)
   extends Task[U](stageId, stageAttemptId, partition.index, localProperties, serializedTaskMetrics,
-    jobId, appId, appAttemptId)
+    jobId, appId, appAttemptId, depMap,
+    curRunningRddMap)
   with Serializable {
 
   @transient private[this] val preferredLocs: Seq[TaskLocation] = {
