@@ -470,7 +470,12 @@ private[spark] class MemoryStore(
   private def getRddId(blockId: BlockId): Option[Int] = {
     blockId.asRDDId.map(_.rddId)
   }
-
+def trytoput{
+  blockManager.inMemBlockExInfo.synchronized{
+          logTrace("Add " + blockId.getRddId + " to inMemBlockExInfo")
+          blockManager.inMemBlockExInfo.add(blockManager.blockExInfo.get(blockId))
+        }
+}
   /**
    * Try to evict blocks to free up a given amount of space to store a particular block.
    * Can fail if either the block is bigger than our memory or it would require replacing
@@ -497,23 +502,30 @@ private[spark] class MemoryStore(
       // This is synchronized to ensure that the set of entries is not changed
       // (because of getValue or getBytes) while traversing the iterator, as that
       // can lead to exceptions.
-      entries.synchronized {
-        val iterator = entries.entrySet().iterator()
-        while (freedMemory < space && iterator.hasNext) {
-          val pair = iterator.next()
-          val blockId = pair.getKey
-          val entry = pair.getValue
-          if (blockIsEvictable(blockId, entry)) {
-            // We don't want to evict blocks which are currently being read, so we need to obtain
-            // an exclusive write lock on blocks which are candidates for eviction. We perform a
-            // non-blocking "tryLock" here in order to ignore blocks which are locked for reading:
-            if (blockInfoManager.lockForWriting(blockId, blocking = false).isDefined) {
-              selectedBlocks += blockId
-              freedMemory += pair.getValue.size
-            }
-          }
-        }
-      }
+            blockManager.inMemBlockExInfo.synchronized {
+                    val iterator = blockManager.inMemBlockExInfo.iterator()
+                    while (actualFreeMemory + selectedMemory < space && iterator.hasNext) {
+                      // pair类型是 BlockExINfo，pair.blockId类型是BlockId
+                        val pair = iterator.next()
+
+                          blockManager.stageExInfos.get(blockManager.currentStage) match {
+                          case Some(curStageExInfo) =>
+                                // cur is this stage's output RDD
+                            if (!curStageExInfo.curRunningRddMap.contains(pair.blockId.getRddId)) {
+                              entries.synchronized {
+                                val memblockId = entries.get(pair.blockId)
+                               // memblockId是entry类型？
+
+                                selectedBlocks += pair.blockId
+                                selectedMemory += memblockId.size
+                              }
+                                }
+                          case None =>
+                                logError("ERROR HERE")
+                        }
+                      }
+                  }
+
 
       def dropBlock[T](blockId: BlockId, entry: MemoryEntry[T]): Unit = {
         val data = entry match {
