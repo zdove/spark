@@ -60,7 +60,9 @@ private[spark] abstract class Task[T](
       SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array(),
     val jobId: Option[Int] = None,
     val appId: Option[String] = None,
-    val appAttemptId: Option[String] = None) extends Serializable {
+    val appAttemptId: Option[String] = None,
+var depMap: HashMap[Int, Set[Int]] = new HashMap[Int, Set[Int]],
+  var curRunningRddMap: HashMap[Int, Set[Int]] = new HashMap[Int, Set[Int]]) extends Serializable {
 
   @transient lazy val metrics: TaskMetrics =
     SparkEnv.get.closureSerializer.newInstance().deserialize(ByteBuffer.wrap(serializedTaskMetrics))
