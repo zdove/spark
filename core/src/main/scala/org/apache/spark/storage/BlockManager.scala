@@ -96,7 +96,12 @@ private[spark] class BlockManager(
     new MemoryStore(conf, blockInfoManager, serializerManager, memoryManager, this)
   private[spark] val diskStore = new DiskStore(conf, diskBlockManager)
   memoryManager.setMemoryStore(memoryStore)
-
+ val blockExInfo = new java.util.HashMap[RDDBlockId, BlockExInfo]
+ 
+   val inMemBlockExInfo = new java.util.TreeSet[BlockExInfo]
+ 
+   var stageExInfos: HashMap[Int, StageExInfo] = new HashMap[Int, StageExInfo]
+   var currentStage: Int = -1
   // Note: depending on the memory manager, `maxMemory` may actually vary over time.
   // However, since we use this only for reporting and logging, what we actually want here is
   // the absolute maximum value that `maxMemory` can ever possibly reach. We may need
@@ -1309,6 +1314,15 @@ private[spark] class BlockManager(
       blockId: BlockId,
       data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = {
     logInfo(s"Dropping block $blockId from memory")
+        if (blockId.isRDD) {
+            logTrace("change exist status of " + blockId + " to 0")
+            val curValue = blockExInfo.get(blockId)
+            curValue.isExist = 0
+            inMemBlockExInfo.synchronized {
+                logTrace("Remove " + blockId + " from inMemBlockExInfo")
+                inMemBlockExInfo.remove(curValue)
+              }
+          }
     val info = blockInfoManager.assertBlockIsLockedForWriting(blockId)
     var blockIsUpdated = false
     val level = info.level
@@ -1358,6 +1372,59 @@ private[spark] class BlockManager(
   def removeRdd(rddId: Int): Int = {
     // TODO: Avoid a linear scan by creating another mapping of RDD.id to blocks.
     logInfo(s"Removing RDD $rddId")
+       logTrace("Now we in Stage: " + currentStage)
+    logTrace(" and the depMap is: " + stageExInfos(currentStage).depMap)
+
+         var targetRdd: Int = -1
+         stageExInfos(currentStage).depMap.foreach { cur =>
+            if (cur._2.contains(rddId)) {
+                targetRdd = cur._1
+              }
+          }
+
+          logTrace("Now we set targetRDD to: " + targetRdd + " becasue we removeRdd: " + rddId)
+
+          val iter = blockExInfo.entrySet().iterator()
+          while (iter.hasNext) {
+            val cur = iter.next()
+            val curId = cur.getKey.getRddId
+            val splitIndex = cur.getKey.getRddSplitIndex
+            if (curId == targetRdd) {
+                inMemBlockExInfo.synchronized {
+                    if (inMemBlockExInfo.contains(cur.getValue)) {
+                        logTrace("Remove " + cur.getKey + " from inMemBlockExInfo")
+                        inMemBlockExInfo.remove(cur.getValue)
+                        cur.getValue.creatCost = cur.getValue.creatCost + blockExInfo.get(
+                          new RDDBlockId(rddId, splitIndex)).creatCost
+                        cur.getValue.norCost = cur.getValue.
+                            creatCost.toDouble / (cur.getValue.size / 1024 / 1024)
+
+                          logTrace("Add " + cur.getValue.blockId + " to inMemBlockExInfo")
+                        inMemBlockExInfo.add(cur.getValue)
+
+                        } else {
+                        cur.getValue.creatCost = cur.getValue.creatCost + blockExInfo.get(
+                            new RDDBlockId(rddId, splitIndex)).creatCost
+                        cur.getValue.norCost = cur.getValue.
+                            creatCost.toDouble / (cur.getValue.size / 1024 / 1024)
+                      }
+                  }
+
+                  logTrace("Due to Removing RDD " + rddId + " we have to change rdd_" + curId + "_"
+                    + splitIndex + " ctime")
+              } else if (curId == rddId) {
+                val curValue = blockExInfo.get(new RDDBlockId(rddId, splitIndex))
+                curValue.isExist = 0
+                inMemBlockExInfo.synchronized {
+                    logTrace("Remove " + curValue.blockId + " from inMemBlockExInfo")
+                    inMemBlockExInfo.remove(curValue)
+                  }
+                logTrace("Due to Removing RDD " + rddId + " we now change " + curId + "_"
+                    + splitIndex + " to not exist and TreeSet have size " + inMemBlockExInfo.size())
+              }
+          }
+
+          // TODO
     val blocksToRemove = blockInfoManager.entries.flatMap(_._1.asRDDId).filter(_.rddId == rddId)
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster = false) }
     blocksToRemove.size
