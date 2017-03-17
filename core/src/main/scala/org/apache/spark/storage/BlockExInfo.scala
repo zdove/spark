@@ -5,10 +5,10 @@ package org.apache.spark.storage
   */
 class BlockExInfo (val blockId: RDDBlockId) extends Comparable[BlockExInfo] {
 
-      var size: Long = _
-    var creatStartTime: Long = _
+      var size: Long = 1024
+    var creatStartTime: Long = 0
     var creatFinTime: Long = _
-    var creatCost: Long = _
+    var creatCost: Long = 1
 
       var serStartTime: Long = _
     var serFinTime: Long = _
