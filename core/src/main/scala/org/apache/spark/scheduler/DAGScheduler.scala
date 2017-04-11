@@ -917,6 +917,19 @@ class DAGScheduler(
       logDebug("submitStage(" + stage + ")")
       if (!waitingStages(stage) && !runningStages(stage) && !failedStages(stage)) {
         val missing = getMissingParentStages(stage).sortBy(_.id)
+          val rddvalue = getMissingParentvalue(stage)
+        rddvalue.foreach { rdds =>
+          if (! valueRDDs.contains(rdds.id)) {
+            valueRDDs.put(rdds.id, 1)
+          }
+          else {
+            var value = valueRDDs.getOrElseUpdate(rdds.id, 0)
+           // var newvalue = 0
+           val newvalue = 1 + value
+            valueRDDs.put(rdds.id, newvalue)
+          }
+        }
+
         logDebug("missing: " + missing)
         if (missing.isEmpty) {
           logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
