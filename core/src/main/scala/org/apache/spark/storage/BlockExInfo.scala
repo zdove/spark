@@ -22,15 +22,21 @@ class BlockExInfo (val blockId: RDDBlockId) extends Comparable[BlockExInfo] {
       var norCost: Double = _ // normalized cost
 
       var sonSet: Set[BlockId] = Set()
-
+  var value: Int = 1
+      // write the creatFinTime and cal the creatFinTime
+      var kind: Double = 1.0
       // write the creatFinTime and cal the creatFinTime
     def writeFinAndCalCreatCost(finTime: Long) {
         creatFinTime = finTime
         creatCost = creatFinTime - creatStartTime
-        norCost = creatCost.toDouble / (size / 1024 / 1024)
+        // norCost = creatCost.toDouble * value / (size / 1024 / 1024)
+      norCost = creatCost.toDouble * value / kind
         isExist = 1
       }
 
+    def refreshnorCost(): Unit = {
+      norCost = norCost / value * (value-1)
+    }
       def writeAndCalSerCost(serStart: Long, serFin: Long): Unit = {
         serStartTime = serStart
         serFinTime = serFin
