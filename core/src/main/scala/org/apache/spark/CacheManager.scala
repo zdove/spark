@@ -8,6 +8,11 @@ def getOrCompute[T](
     logDebug(s"Looking for partition $key")
     blockManager.get(key) match {
       case Some(blockResult) =>
+           if (blockManager.blockExInfo.containsKey(key)) {
+
+          blockManager.blockExInfo.get(key).refreshnorCost()
+          blockManager.blockExInfo.get(key).value -= 1
+        }
         // Partition is already materialized, so just return its values
         val existingMetrics = context.taskMetrics
           .getInputMetricsForReadMethod(blockResult.readMethod)
@@ -34,7 +39,8 @@ def getOrCompute[T](
               if (blockManager.blockExInfo.containsKey(parBlockId) &&
                 blockManager.blockExInfo.get(parBlockId).isExist
                   == 1) { // par is exist
-
+               //判断此rdd所依赖的父RDD是不是都被cache ，是的话更改创建时间
+                    //dep应该只包含父RDD，不包含父RDD的父RDD
               } else { // par not exist now, add this key to it's par's watching set
                 parExist = false
                 if (!blockManager.blockExInfo.containsKey(parBlockId)) {
